@@ -43,3 +43,7 @@ Thumbs.db
 # ASP.NET Core local settings
 appsettings.Local.json
 appsettings.*.Local.json
+
+# Application settings
+**/appsettings.json
+**/appsettings.*.json

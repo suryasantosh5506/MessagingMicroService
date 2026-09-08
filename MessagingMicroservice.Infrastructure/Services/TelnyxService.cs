@@ -1,4 +1,9 @@
-﻿using System.Net.Http.Headers;
+﻿using System;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Threading.Tasks;
 using MessagingMicroservice.Application.Interfaces;
 using MessagingMicroservice.Application.Models.ProviderModels;
 using MessagingMicroservice.Domain.Enums;
@@ -14,7 +19,7 @@ public class TelnyxService : IMessageProvider
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
 
-    public TelnyxService(HttpClient httpClient,IConfiguration configuration)
+    public TelnyxService(HttpClient httpClient, IConfiguration configuration)
     {
         _httpClient = httpClient;
         _configuration = configuration;
@@ -22,45 +27,49 @@ public class TelnyxService : IMessageProvider
 
     public async Task<ProviderSendMessageResult> SendMessageAsync(ProviderSendMessageRequest request)
     {
-        string url =$"https://api.telnyx.com/v2/number_lookup/{request.To}?type=carrier";
-
         var apiKey = _configuration["Telnyx:ApiKey"];
+        var fromNumber = _configuration["Telnyx:From"];
+        var callbackUrl = _configuration["Telnyx:CallbackUrl"];
 
-        var getRequest = new HttpRequestMessage(HttpMethod.Get, url);
-
-        getRequest.Headers.Authorization =new AuthenticationHeaderValue("Bearer", apiKey);
-
-        var response = await _httpClient.SendAsync(getRequest);
-
-        if (!response.IsSuccessStatusCode)
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(fromNumber))
         {
-            throw new ProviderException("Invalid Phone Number",true);
+            throw new ProviderException("Telnyx configuration settings are missing.", canFallback: true);
         }
-
-        TelnyxConfiguration.SetApiKey(apiKey);
-
-        var service = new MessageService();
-
-        var options = new NewMessage
-        {
-            From = _configuration["Telnyx:From"]!,
-            To = request.To,
-            Text = request.Content,
-            WebhookUrl = _configuration["Telnyx:CallbackUrl"],
-        };
 
         try
         {
+            string url = $"https://api.telnyx.com/v2/number_lookup/{request.To}?type=carrier";
+            using var getRequest = new HttpRequestMessage(HttpMethod.Get, url);
+            getRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+            using var response = await _httpClient.SendAsync(getRequest);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ProviderException("Invalid Phone Number",false);
+            }
+
+            TelnyxConfiguration.SetApiKey(apiKey);
+            var service = new MessageService();
+
+            var options = new NewMessage
+            {
+                From = fromNumber,
+                To = request.To,
+                Text = request.Content,
+                WebhookUrl = callbackUrl
+            };
+
             var message = await service.CreateAsync(options);
 
-            var jsonStatus = message.To[0]?.Status?.ToString();
+            var jsonStatus = message.To?.FirstOrDefault()?.Status?.ToString();
             TelnyxMessageStatus status = TelnyxMessageStatus.Queued;
 
             if (!string.IsNullOrEmpty(jsonStatus))
             {
-                string normalisedStatus = jsonStatus.Replace("_", "");
+                string normalisedStatus = jsonStatus.Replace("_", "").Replace("-", "");
 
-                if (Enum.TryParse(normalisedStatus,ignoreCase:true, out TelnyxMessageStatus castedStatus))
+                if (Enum.TryParse<TelnyxMessageStatus>(normalisedStatus, ignoreCase: true, out var castedStatus))
                 {
                     status = castedStatus;
                 }
@@ -70,20 +79,24 @@ public class TelnyxService : IMessageProvider
             {
                 ProviderMessageId = message.Id.ToString()!,
                 Status = TelnyxStatusMapper.Map(status),
-                FromNumber = _configuration["Telnyx:From"]!,
+                FromNumber = fromNumber,
                 ToNumber = request.To,
                 Provider = MessageProvider.Telnyx
             };
         }
+        catch (HttpRequestException ex)
+        {
+            throw new ProviderException($"Telnyx connection failure: {ex.Message}", canFallback: true);
+        }
         catch (Telnyx.TelnyxException e)
         {
-            var telnyxError=e.TelnyxErrors.FirstOrDefault();
+            var telnyxError = e.TelnyxErrors?.FirstOrDefault();
             if (telnyxError == null)
             {
-                throw new ProviderException(e.Message,false);
+                throw new ProviderException(e.Message, canFallback: true);
             }
-            
-            bool isValidCode=int.TryParse(telnyxError.Code,out var code);
+
+            bool isValidCode = int.TryParse(telnyxError.Code, out var code);
 
             bool canFallback =
                 isValidCode && (
@@ -98,7 +111,8 @@ public class TelnyxService : IMessageProvider
                     code == (int)TelnyxMessageErrorCode.NoUsableNumbersInPool ||
                     code == (int)TelnyxMessageErrorCode.InvalidAlphaSenderId
                 );
-            throw new ProviderException(e.Message,canFallback);
+
+            throw new ProviderException(e.Message, canFallback);
         }
     }
 }

@@ -25,18 +25,17 @@ public class TwilioService : IMessageProvider
         string accountSid = _configuration["Twilio:AccountSid"]!;
         string authToken = _configuration["Twilio:AuthToken"]!;
         string from = _configuration["Twilio:From"]!;
-
-        TwilioClient.Init(accountSid, authToken);
-
-        var lookUpResult = await PhoneNumberResource.FetchAsync(request.To);
-
-        if (lookUpResult.Valid==false)
-        {
-            throw new ProviderException("Invalid PhoneNumber",false);
-        }
-
+        
         try
         {
+            TwilioClient.Init(accountSid, authToken);
+            var lookUpResult = await PhoneNumberResource.FetchAsync(request.To,fields: "line_type_intelligence");
+
+            if (lookUpResult?.Valid==false)
+            {
+                throw new ProviderException("Invalid PhoneNumber",false);
+            }
+            
             var messageResult = await MessageResource.CreateAsync(
                 to: new PhoneNumber(request.To),
                 from: new PhoneNumber(from),
@@ -67,17 +66,18 @@ public class TwilioService : IMessageProvider
             var errorCode = (TwilioMessageErrorCode)e.Code;
 
             bool canFallback =
-                errorCode == TwilioMessageErrorCode.QueueOverflow ||
-                errorCode == TwilioMessageErrorCode.CarrierNetworkCongestion ||
-                errorCode == TwilioMessageErrorCode.ProviderTimeout ||
-                errorCode == TwilioMessageErrorCode.AccountSuspended ||
-                errorCode == TwilioMessageErrorCode.MessageFiltered ||
-                errorCode == TwilioMessageErrorCode.UnknownError ||
-                errorCode == TwilioMessageErrorCode.SenderIdPreRegistrationRequired ||
-                errorCode == TwilioMessageErrorCode.OutboundMessagingDisabled ||
-                errorCode == TwilioMessageErrorCode.OtpMessageBodyFiltered ||
-                errorCode == TwilioMessageErrorCode.SenderRestrictedOrUnregistered ||
-                errorCode == TwilioMessageErrorCode.AlphanumericSenderUnauthorized;
+              errorCode == TwilioMessageErrorCode.InvalidParameters ||
+              errorCode == TwilioMessageErrorCode.QueueOverflow ||
+              errorCode == TwilioMessageErrorCode.CarrierNetworkCongestion ||
+              errorCode == TwilioMessageErrorCode.ProviderTimeout ||
+              errorCode == TwilioMessageErrorCode.AccountSuspended ||
+              errorCode == TwilioMessageErrorCode.MessageFiltered ||
+              errorCode == TwilioMessageErrorCode.UnknownError ||
+              errorCode == TwilioMessageErrorCode.SenderIdPreRegistrationRequired ||
+              errorCode == TwilioMessageErrorCode.OutboundMessagingDisabled ||
+              errorCode == TwilioMessageErrorCode.OtpMessageBodyFiltered ||
+              errorCode == TwilioMessageErrorCode.SenderRestrictedOrUnregistered ||
+              errorCode == TwilioMessageErrorCode.AlphanumericSenderUnauthorized;
 
             throw new ProviderException(e.Message,canFallback);
         }

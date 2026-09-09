@@ -34,14 +34,22 @@ public class TelnyxWebhookController:ControllerBase
     [HttpPost("inbound")]
     public async Task<IActionResult> ReceiveMessageAsync()
     {
+        Console.WriteLine();
+        Console.WriteLine("========== TELNYX INBOUND WEBHOOK RECEIVED ==========");
         using var reader = new StreamReader(Request.Body);
         var body = await reader.ReadToEndAsync();
 
+        Console.WriteLine($"Webhook Body: {body}");
+        
         var validationRequest = GetWebhookVerificationRequest(body);
 
         bool isValid = await _validator.ValidateAsync(validationRequest);
+        
+        Console.WriteLine($"Telnyx Signature Valid: {isValid}");
 
         if (!isValid) return Unauthorized();
+        
+        Console.WriteLine("TELNYX WEBHOOK SIGNATURE VALID");
 
         var webhook = JsonSerializer.Deserialize<TelnyxInboundJsonData>(
             body,
@@ -49,40 +57,81 @@ public class TelnyxWebhookController:ControllerBase
             {
                 PropertyNameCaseInsensitive = true
             }); 
+        
+        Console.WriteLine("After Telnyx JSON deserialization");
 
-        if (webhook?.Data?.Payload is null || webhook?.Data?.EventType != "message.received")
+
+        if (webhook?.Data?.Payload is null)
+        {
+            Console.WriteLine("Telnyx payload is NULL");
             return Ok();
+        }
 
+        if (webhook.Data.EventType != "message.received")
+        {
+            Console.WriteLine($"Unexpected Event Type: {webhook.Data.EventType}");
+            return Ok();
+        }
+
+        Console.WriteLine("Telnyx payload exists");
+        
         var message = GetInboundMessageRequest(webhook);
+        
+        Console.WriteLine($"From: {message.FromNumber}");
+        Console.WriteLine($"To: {message.ToNumber}");
+        Console.WriteLine($"Content: {message.Content}");
+        Console.WriteLine($"Provider Message ID: {message.MessageId}");
+
 
         var inboundMessageId=await _inboundMessageService.SaveInboundMessageAsync(message);
+        
+        Console.WriteLine($"Inbound Message Saved. ID: {inboundMessageId}");
 
         if (IsOptoutRequest(webhook))
         {
             await SaveOptOutPhoneNumberAsync(webhook, inboundMessageId);
         }
 
+        Console.WriteLine("========== TELNYX INBOUND WEBHOOK COMPLETED ==========");
+        Console.WriteLine();
+        
         return Ok();
     }
 
     [HttpPost("status")]
     public async Task<IActionResult> UpdateMessageAsync()
     {
+        Console.WriteLine("========== TELNYX STATUS WEBHOOK RECEIVED ==========");
+        
         using var reader = new StreamReader(Request.Body);
         var body = await reader.ReadToEndAsync();
+        
+        Console.WriteLine($"Telnyx Webhook Body: {body}");
 
         var validationRequest = GetWebhookVerificationRequest(body);
         bool isValid = await _validator.ValidateAsync(validationRequest);
 
+        Console.WriteLine($"Telnyx Signature Valid: {isValid}");
+        
         if (!isValid) return Unauthorized();
 
+        Console.WriteLine("Before Telnyx JSON deserialization");
+        
         var webhook = JsonSerializer.Deserialize<TelnyxStatusJsonData>(
             body,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        
+        Console.WriteLine("After Telnyx JSON deserialization");
 
         var payload = webhook?.Data?.Payload;
-        if (payload == null) return Ok();
-
+        if (payload == null)
+        {
+            Console.WriteLine("Telnyx payload is NULL");
+            return Ok();
+        }
+        
+        Console.WriteLine("Telnyx payload exists");
+        
         string? rawStatus = payload.To?.FirstOrDefault()?.Status;
         if (string.IsNullOrWhiteSpace(rawStatus)) return Ok();
         
@@ -99,7 +148,7 @@ public class TelnyxWebhookController:ControllerBase
         };
 
         await _updateMessageStatusService.UpdateMessageStatusAsync(updateStatusRequest);
-
+        
         return Ok();
     }
     

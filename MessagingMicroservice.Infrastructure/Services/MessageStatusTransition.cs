@@ -15,17 +15,22 @@ public static class MessageStatusTransition
                 incoming == MessageStatus.Queued ||
                 incoming == MessageStatus.Sending ||
                 incoming == MessageStatus.Sent ||
+                incoming == MessageStatus.Delivered ||
+                incoming == MessageStatus.Undelivered ||
                 incoming == MessageStatus.Failed ||
                 incoming == MessageStatus.Cancelled,
 
             MessageStatus.Queued =>
                 incoming == MessageStatus.Sending ||
                 incoming == MessageStatus.Sent ||
+                incoming == MessageStatus.Delivered ||
+                incoming == MessageStatus.Undelivered ||
                 incoming == MessageStatus.Failed ||
                 incoming == MessageStatus.Cancelled,
 
             MessageStatus.Sending =>
                 incoming == MessageStatus.Sent ||
+                incoming == MessageStatus.Delivered ||
                 incoming == MessageStatus.Failed ||
                 incoming == MessageStatus.Undelivered,
 

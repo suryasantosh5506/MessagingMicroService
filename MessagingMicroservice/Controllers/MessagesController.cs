@@ -20,7 +20,7 @@ public class MessagesController:ControllerBase
     [HttpPost("send_message")]
     public async Task<IActionResult> SendMessageAsync([FromBody] SendMessageRequest request)
     {   
-        await _sendMessageService.SendMessageAsync(request);
-        return Ok();
+        var response=await _sendMessageService.SendMessageAsync(request);
+        return Ok(response);
     }
 }

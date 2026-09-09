@@ -65,7 +65,7 @@ public class TelnyxService : IMessageProvider
             var jsonStatus = message.To?.FirstOrDefault()?.Status?.ToString();
             TelnyxMessageStatus status = TelnyxMessageStatus.Queued;
 
-            if (!string.IsNullOrEmpty(jsonStatus))
+            if (!string.IsNullOrEmpty(jsonStatus))  
             {
                 string normalisedStatus = jsonStatus.Replace("_", "").Replace("-", "");
 

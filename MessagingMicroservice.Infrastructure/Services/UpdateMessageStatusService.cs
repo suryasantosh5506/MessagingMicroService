@@ -21,6 +21,11 @@ public class UpdateMessageStatusService:IUpdateMessageStatusService
         if (message == null) return;
         var currentStatus=Enum.Parse<MessageStatus>(message.Status);
         bool isValid=MessageStatusTransition.IsValid(currentStatus,request.Status);
+        
+        Console.WriteLine($"Current Status: {currentStatus}");
+        Console.WriteLine($"Incoming Status: {request.Status}");
+        Console.WriteLine($"Transition Valid: {isValid}");
+        
         if (!isValid) return;
         await _outboundMessageRepository.UpdateMessage(request);    
     }

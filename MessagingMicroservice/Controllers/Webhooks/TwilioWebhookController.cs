@@ -16,29 +16,45 @@ public class TwilioWebhookController : ControllerBase
     private readonly IInboundMessageService _inboundMessageService;
     private readonly IUpdateMessageStatusService _updateMessageStatusService;
     private readonly IOptoutPhoneNumberService _optoutPhoneNumberService;
+    private readonly IConfiguration _configuration;
     private static readonly string[] OptOutKeywords = ["STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"];
 
     public TwilioWebhookController(
         IValidateWebhookRequest<TwilioWebhookVerificationRequest> validator,
         IInboundMessageService inboundMessageService,
         IUpdateMessageStatusService updateMessageStatusService,
-        IOptoutPhoneNumberService optoutPhoneNumberService)
+        IOptoutPhoneNumberService optoutPhoneNumberService,
+        IConfiguration configuration)
     {
         _validator = validator;
         _inboundMessageService = inboundMessageService;
         _updateMessageStatusService = updateMessageStatusService;
         _optoutPhoneNumberService = optoutPhoneNumberService;
+        _configuration = configuration;
     }
 
     [HttpPost("inbound")]
     public async Task<IActionResult> ReceiveMessageAsync()
     {
+        
+        Console.WriteLine();
+        Console.WriteLine("========== TWILIO INBOUND WEBHOOK RECEIVED ==========");
+        
         var form = await Request.ReadFormAsync();
+        
+        Console.WriteLine($"MessageSid: {form["MessageSid"]}");
+        Console.WriteLine($"From: {form["From"]}");
+        Console.WriteLine($"To: {form["To"]}");
+        Console.WriteLine($"Body: {form["Body"]}");
         
         var validationRequest = CreateVerificationRequest(Request, form);
         bool isValid = await _validator.ValidateAsync(validationRequest);
+        
+        Console.WriteLine($"Twilio Signature Valid: {isValid}");
 
         if (!isValid) return Unauthorized();
+        
+        Console.WriteLine("TWILIO WEBHOOK SIGNATURE VALID");
 
         var messageRequest = CreateInboundMessageRequest(form);
         var inboundMessageId=await _inboundMessageService.SaveInboundMessageAsync(messageRequest);
@@ -50,17 +66,28 @@ public class TwilioWebhookController : ControllerBase
             await SaveOptOutPhoneNumber(form,inboundMessageId);
         }
         
+        Console.WriteLine("========== TWILIO INBOUND WEBHOOK COMPLETED ==========");
+        Console.WriteLine();
+        
         return Ok();
     }
 
     [HttpPost("status")]
     public async Task<IActionResult> UpdateMessageStatusAsync()
     {
+        Console.WriteLine("========== TWILIO STATUS WEBHOOK RECEIVED ==========");
+
         var form = await Request.ReadFormAsync();
+        
+        Console.WriteLine($"Twilio MessageSid: {form["MessageSid"]}");
+        Console.WriteLine($"Twilio MessageStatus: {form["MessageStatus"]}");
+        Console.WriteLine($"Twilio ErrorCode: {form["ErrorCode"]}");
         
         var validationRequest = CreateVerificationRequest(Request, form);
         bool isValid = await _validator.ValidateAsync(validationRequest);
 
+        Console.WriteLine($"Twilio Signature Valid: {isValid}");
+        
         if (!isValid) return Unauthorized();
 
         string providerMessageId = form["MessageSid"].ToString();
@@ -93,8 +120,9 @@ public class TwilioWebhookController : ControllerBase
         var signature = request.Headers["X-Twilio-Signature"].ToString();
         var parameters = form.ToDictionary(k => k.Key, v => v.Value.ToString());
 
-        string url = $"{request.Scheme}://{request.Host}{request.Path}{request.QueryString}";
-
+        // string url = _configuration["Twilio:CallbackUrl"]!; //for status testing
+        string url = _configuration["Twilio:InboundUrl"]!; //for inbound testing
+ 
         return new TwilioWebhookVerificationRequest
         {
             Parameters = parameters,

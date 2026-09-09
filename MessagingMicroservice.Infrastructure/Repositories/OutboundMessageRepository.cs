@@ -71,15 +71,16 @@ public class OutboundMessageRepository:IOutboundMessageRepository
         return id;
     }
 
-    public Task UpdateMessage(UpdateMessageStatus request)
+    public async Task UpdateMessage(UpdateMessageStatus request)
     {
         var query = """
                       UPDATE dbo.tblOutboundMessages
                       set status=@status,UpdatedAt=@updatedAt
-                      where ProviderMessageId=@providerMessageId;
+                      where ProviderMessageId=@providerMessageId
+                      AND Status NOT IN ('Delivered', 'Undelivered', 'Failed', 'Cancelled');
                     """;
         
         using var connection=_dapperContext.GetConnection();
-        return connection.ExecuteAsync(query,new {status=request.Status.ToString(),updatedAt=DateTime.UtcNow,providerMessageId=request.ProviderMessageId});
+        await connection.ExecuteAsync(query,new {status=request.Status.ToString(),updatedAt=DateTime.UtcNow,providerMessageId=request.ProviderMessageId});
     }
 }

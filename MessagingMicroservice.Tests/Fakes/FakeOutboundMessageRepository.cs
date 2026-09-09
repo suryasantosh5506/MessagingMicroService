@@ -24,7 +24,7 @@ public class FakeOutboundMessageRepository:IOutboundMessageRepository
         return Task.FromResult(1);
     }
 
-    public Task UpdateMessage(UpdateMessageStatus request)
+    public Task<int> UpdateMessage(UpdateMessageStatus request)
     {
         return Task.CompletedTask;
     }

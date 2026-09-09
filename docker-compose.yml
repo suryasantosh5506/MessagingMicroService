@@ -1,0 +1,32 @@
+services:
+  database:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: MessagingMicroserviceDb
+    
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Santosh@123"
+    
+    ports:
+      - "1433:1433"
+    
+    volumes:
+      - messaging_sql_data:/var/opt/mssql
+      - ./DbMigrations/Backups:/backup
+      - ./DbMigrations/DbScripts:/restore
+    
+    entrypoint: [ "/restore/init-db.sh" ]
+    
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Santosh@123' -N -C -Q 'SELECT 1' || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+volumes:
+    messaging_sql_data:
